@@ -50,3 +50,37 @@ def test_cli_rejects_donchian_exit_not_below_entry(tmp_path):
     pd.DataFrame({"date": pd.bdate_range("2020-01-01", periods=50), "close": range(1, 51)}).to_csv(path, index=False)
     with pytest.raises(SystemExit):
         main(["--csv", str(path), "--strategy", "donchian", "--entry-days", "10", "--exit-days", "10"])
+
+
+def test_momentum_long_when_above_lookback_close():
+    from quant_platform.strategy import time_series_momentum
+
+    close = pd.Series([1.0, 2.0, 3.0, 2.0, 1.0, 4.0])
+    pos = time_series_momentum(close, lookback=2)
+    # Bar 2: 3 > 1 -> long. Bar 3: 2 > 2 is False -> flat. Bar 4: 1 < 3 -> flat. Bar 5: 4 > 1 -> long.
+    assert pos.tolist() == [0, 0, 1, 0, 0, 1]
+
+
+def test_momentum_uses_only_past_data():
+    from quant_platform.strategy import time_series_momentum
+
+    rng = np.random.default_rng(2)
+    close = pd.Series(100 * np.cumprod(1 + rng.normal(0, 0.02, 300)))
+    full = time_series_momentum(close, lookback=30)
+    truncated = time_series_momentum(close.iloc[:150], lookback=30)
+    pd.testing.assert_series_equal(full.iloc[:150], truncated, check_names=False)
+
+
+def test_momentum_rejects_non_positive_lookback():
+    from quant_platform.strategy import time_series_momentum
+
+    with pytest.raises(ValueError):
+        time_series_momentum(pd.Series([1.0, 2.0]), lookback=0)
+
+
+def test_cli_runs_momentum(tmp_path, capsys):
+    closes = [100.0 + i * 0.5 for i in range(200)]
+    path = tmp_path / "prices.csv"
+    pd.DataFrame({"date": pd.bdate_range("2020-01-01", periods=200), "close": closes}).to_csv(path, index=False)
+    assert main(["--csv", str(path), "--strategy", "momentum", "--lookback", "30"]) == 0
+    assert "Time-series momentum (lookback 30 days)" in capsys.readouterr().out

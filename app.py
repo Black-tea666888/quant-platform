@@ -20,7 +20,9 @@ from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import MARKETS, get_market
 from quant_platform.paper import PaperAccount, advance
-from quant_platform.strategy import DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, STRATEGIES, build_position
+from quant_platform.strategy import (
+    DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
+)
 
 PERCENT_KEYS = {"total_return", "cagr", "max_drawdown", "exposure", "win_rate", "buy_hold"}
 TW_LOT_SIZE = 1000
@@ -222,14 +224,18 @@ def main() -> None:
         else:
             params["entry_days"] = int(st.number_input(t("ui_entry_days", lang), min_value=2, value=DONCHIAN_ENTRY_DAYS, step=1))
             params["exit_days"] = int(st.number_input(t("ui_exit_days", lang), min_value=1, value=DONCHIAN_EXIT_DAYS, step=1))
+        if strategy == "momentum":
+            params["lookback"] = int(st.number_input(t("ui_lookback", lang), min_value=1, value=MOMENTUM_LOOKBACK, step=1))
         discount = st.number_input(t("ui_discount", lang), min_value=0.01, max_value=1.0, value=1.0, step=0.05)
         run = st.button(t("ui_run", lang), type="primary", use_container_width=True)
 
     source = (symbol, start, uploaded)
     if strategy == "sma":
         st.title(t("strategy_sma", lang, fast=params["fast"], slow=params["slow"]))
-    else:
+    elif strategy == "donchian":
         st.title(t("strategy_donchian", lang, entry=params["entry_days"], exit=params["exit_days"]))
+    else:
+        st.title(t("strategy_momentum", lang, lookback=params["lookback"]))
     st.caption(t("disclaimer", lang))
 
     tab_backtest, tab_paper = st.tabs([t("tab_backtest", lang), t("tab_paper", lang)])

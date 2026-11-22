@@ -15,11 +15,13 @@ from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import get_market, load_market_file
 from quant_platform.paper import PaperAccount, advance
-from quant_platform.strategy import DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, STRATEGIES, build_position
+from quant_platform.strategy import (
+    DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Paper trade an SMA or Donchian strategy (no broker connection)")
+    p = argparse.ArgumentParser(description="Paper trade an SMA, Donchian or momentum strategy (no broker connection)")
     p.add_argument("--lang", default=DEFAULT_LANG, choices=SUPPORTED_LANGS)
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--csv", help="price CSV with date and close columns")
@@ -36,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--slow", type=int, default=60)
     p.add_argument("--entry-days", type=int, default=DONCHIAN_ENTRY_DAYS)
     p.add_argument("--exit-days", type=int, default=DONCHIAN_EXIT_DAYS)
+    p.add_argument("--lookback", type=int, default=MOMENTUM_LOOKBACK)
     p.add_argument("--lot-size", type=int, default=None, help="shares per lot (defaults to 1000 for TW, 1 otherwise)")
     p.add_argument("--discount", type=float, default=1.0)
     return p
@@ -72,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         costs = CostModel.from_market(market, discount=args.discount)
         lot_size = args.lot_size if args.lot_size is not None else (1000 if market.code == "TW" else 1)
         position = build_position(
-            args.strategy, prices["close"], fast=args.fast, slow=args.slow, entry_days=args.entry_days, exit_days=args.exit_days
+            args.strategy, prices["close"], fast=args.fast, slow=args.slow,
+            entry_days=args.entry_days, exit_days=args.exit_days, lookback=args.lookback,
         )
 
         orders = advance(account, prices, position, costs, lot_size=lot_size)

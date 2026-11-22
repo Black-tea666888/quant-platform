@@ -6,10 +6,11 @@ import pandas as pd
 
 from quant_platform.i18n import t
 
-STRATEGIES = ("sma", "donchian")
+STRATEGIES = ("sma", "donchian", "momentum")
 DEFAULT_STRATEGY = "sma"
 DONCHIAN_ENTRY_DAYS = 55
 DONCHIAN_EXIT_DAYS = 20
+MOMENTUM_LOOKBACK = 126
 
 
 def sma_crossover(close: pd.Series, fast: int = 20, slow: int = 60) -> pd.Series:
@@ -44,6 +45,18 @@ def donchian_breakout(close: pd.Series, entry_days: int = DONCHIAN_ENTRY_DAYS, e
     return pd.Series(position, index=close.index, dtype=float)
 
 
+def time_series_momentum(close: pd.Series, lookback: int = MOMENTUM_LOOKBACK) -> pd.Series:
+    """Long (1.0) when the close is above the close `lookback` bars ago, otherwise flat (0.0).
+
+    Compares with a past close only, so the decision at bar t uses data up to bar t.
+    """
+    if lookback < 1:
+        raise ValueError(t("error_positive_int", name="lookback"))
+    past = close.shift(lookback)
+    # NaN comparisons are False, so the first `lookback` bars stay flat.
+    return (close > past).astype(float)
+
+
 def build_position(strategy: str, close: pd.Series, **params: int) -> pd.Series:
     """Target position for the named strategy. Pass `fast`/`slow` for SMA, `entry_days`/`exit_days` for Donchian."""
     if strategy == "sma":
@@ -54,4 +67,6 @@ def build_position(strategy: str, close: pd.Series, **params: int) -> pd.Series:
             entry_days=params.get("entry_days", DONCHIAN_ENTRY_DAYS),
             exit_days=params.get("exit_days", DONCHIAN_EXIT_DAYS),
         )
+    if strategy == "momentum":
+        return time_series_momentum(close, lookback=params.get("lookback", MOMENTUM_LOOKBACK))
     raise ValueError(t("error_unknown_strategy", name=strategy, known=", ".join(STRATEGIES)))

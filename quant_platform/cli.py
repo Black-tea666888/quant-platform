@@ -11,7 +11,9 @@ from quant_platform.backtest import CostModel, run_backtest, summarize
 from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import MARKETS, Market, get_market, load_market_file
-from quant_platform.strategy import DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, STRATEGIES, build_position
+from quant_platform.strategy import (
+    DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
+)
 
 PERCENT_KEYS = {"total_return", "cagr", "max_drawdown", "exposure", "win_rate", "buy_hold"}
 ROW_ORDER = [
@@ -82,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--slow", type=_positive_int("--slow"), default=60, help="SMA slow window")
     p.add_argument("--entry-days", type=_positive_int("--entry-days"), default=DONCHIAN_ENTRY_DAYS, help="Donchian entry channel")
     p.add_argument("--exit-days", type=_positive_int("--exit-days"), default=DONCHIAN_EXIT_DAYS, help="Donchian exit channel")
+    p.add_argument("--lookback", type=_positive_int("--lookback"), default=MOMENTUM_LOOKBACK, help="momentum lookback in bars")
 
     # Overrides. If omitted, values come from the market profile.
     p.add_argument("--discount", type=_discount, default=1.0, help="broker fee discount, e.g. 0.6")
@@ -123,7 +126,8 @@ def run(args: argparse.Namespace) -> int:
     )
 
     position = build_position(
-        args.strategy, prices["close"], fast=args.fast, slow=args.slow, entry_days=args.entry_days, exit_days=args.exit_days
+        args.strategy, prices["close"], fast=args.fast, slow=args.slow,
+        entry_days=args.entry_days, exit_days=args.exit_days, lookback=args.lookback,
     )
     result = run_backtest(prices, position, costs)
     stats = summarize(result, prices, periods_per_year=market.trading_days_per_year)
@@ -132,6 +136,8 @@ def run(args: argparse.Namespace) -> int:
     print(f"{t('market', lang)}: {market.name} ({market.code}, {market.currency})")
     if args.strategy == "donchian":
         label = t('strategy_donchian', lang, entry=args.entry_days, exit=args.exit_days)
+    elif args.strategy == "momentum":
+        label = t('strategy_momentum', lang, lookback=args.lookback)
     else:
         label = t('strategy_sma', lang, fast=args.fast, slow=args.slow)
     print(f"{t('strategy', lang)}: {label}")

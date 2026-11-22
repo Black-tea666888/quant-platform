@@ -114,3 +114,11 @@ def test_backtest_offers_csv_downloads(monkeypatch):
     at = next(b for b in at.button if b.label == "Run backtest").click().run()
     assert not at.exception
     assert not at.error
+
+
+def test_momentum_strategy_shows_lookback_input():
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    at.selectbox(key="strategy").set_value("momentum").run()
+    assert not at.exception
+    assert "Lookback days" in {n.label for n in at.number_input}
+    assert any("Time-series momentum" in t.value for t in at.title)

@@ -71,7 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--csv", help="price CSV with at least date and close columns")
-    src.add_argument("--symbol", help="Yahoo Finance symbol, e.g. 2330 or 2330.TW")
+    src.add_argument("--symbol", help="stock symbol, e.g. 2330 or 2330.TW (see --source)")
+    p.add_argument("--source", default="yahoo", choices=("yahoo", "twse"), help="price source for --symbol (default yahoo)")
 
     mkt = p.add_mutually_exclusive_group()
     mkt.add_argument("--market", default="TW", help=f"market code: {', '.join(sorted(MARKETS))} (default TW)")
@@ -116,7 +117,7 @@ def run(args: argparse.Namespace) -> int:
         prices = get_source("csv").fetch(args.csv)
     else:
         symbol = _resolve_symbol(args.symbol, market)
-        prices = get_source("yahoo").fetch(symbol, args.start, args.end)
+        prices = get_source(args.source).fetch(symbol, args.start, args.end)
 
     costs = CostModel(
         commission=market.commission if args.commission is None else args.commission,

@@ -78,3 +78,14 @@ def test_every_key_has_a_translation_in_each_language():
 
 def test_translation_falls_back_to_english():
     assert t("total_return", "fr") == CATALOGS["en"]["total_return"]
+
+
+def test_cli_accepts_twse_source(monkeypatch, capsys):
+    import numpy as np
+    from quant_platform import data_sources
+
+    dates = pd.bdate_range("2020-01-01", periods=200)
+    fake = pd.DataFrame({"date": dates, "close": np.linspace(100, 150, 200)})
+    monkeypatch.setattr(data_sources.TwseSource, "fetch", lambda self, symbol, start=None, end=None: fake)
+    assert main(["--symbol", "2330", "--source", "twse", "--fast", "5", "--slow", "20"]) == 0
+    assert "Total return" in capsys.readouterr().out

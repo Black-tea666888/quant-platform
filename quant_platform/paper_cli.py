@@ -25,7 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lang", default=DEFAULT_LANG, choices=SUPPORTED_LANGS)
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--csv", help="price CSV with date and close columns")
-    src.add_argument("--symbol", help="Yahoo Finance symbol")
+    src.add_argument("--symbol", help="stock symbol, e.g. 2330.TW (see --source)")
+    p.add_argument("--source", default="yahoo", choices=("yahoo", "twse"), help="price source for --symbol (default yahoo)")
     p.add_argument("--start", default=None, help="start date YYYY-MM-DD (only with --symbol)")
     p.add_argument("--end", default=None, help="end date YYYY-MM-DD (only with --symbol)")
     p.add_argument("--state", required=True, help="JSON file that stores the account between runs")
@@ -70,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.csv:
             prices = get_source("csv").fetch(args.csv)
         else:
-            prices = get_source("yahoo").fetch(args.symbol, args.start, args.end)
+            prices = get_source(args.source).fetch(args.symbol, args.start, args.end)
 
         costs = CostModel.from_market(market, discount=args.discount)
         lot_size = args.lot_size if args.lot_size is not None else (1000 if market.code == "TW" else 1)

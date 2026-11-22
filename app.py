@@ -31,16 +31,16 @@ DEFAULT_START = "2015-01-01"
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _fetch_yahoo_cached(symbol: str, start: str) -> pd.DataFrame:
-    """Yahoo prices cached for an hour, so repeated runs do not hit the provider again."""
-    return get_source("yahoo").fetch(symbol, start)
+def _fetch_cached(source_name: str, symbol: str, start: str) -> pd.DataFrame:
+    """Prices cached for an hour, so repeated runs do not hit the provider again."""
+    return get_source(source_name).fetch(symbol, start)
 
 
 def _read_upload(uploaded) -> pd.DataFrame:
     return clean_prices(pd.read_csv(io.BytesIO(uploaded.getvalue())))
 
 
-def _load_prices(lang: str, symbol: str, start: str, uploaded) -> pd.DataFrame:
+def _load_prices(lang: str, symbol: str, start: str, uploaded, source_name: str = "yahoo") -> pd.DataFrame:
     """Prices from a Yahoo symbol when one is entered, otherwise from the uploaded CSV. Raises ValueError."""
     symbol = symbol.strip()
     if symbol:
@@ -49,7 +49,7 @@ def _load_prices(lang: str, symbol: str, start: str, uploaded) -> pd.DataFrame:
         except ValueError as exc:
             raise ValueError(t("error_bad_date", lang)) from exc
         try:
-            return _fetch_yahoo_cached(symbol, start.strip())
+            return _fetch_cached(source_name, symbol, start.strip())
         except ValueError:
             raise
         except Exception as exc:  # network and provider errors from yfinance
@@ -293,6 +293,10 @@ def main() -> None:
         market_codes = sorted(MARKETS)
         market_code = st.selectbox(t("market", lang), market_codes, index=_qp_index("market", market_codes, "TW"))
         symbol = st.text_input(t("ui_symbol", lang), value=_qp("symbol", ""), key="symbol")
+        source_name = st.selectbox(
+            t("ui_source", lang), ["yahoo", "twse"], index=_qp_index("source", ["yahoo", "twse"], "yahoo"),
+            format_func=lambda name: t(f"source_name_{name}", lang), key="source",
+        )
         start = st.text_input(t("ui_start", lang), value=_qp("start", DEFAULT_START), key="start")
         uploaded = st.file_uploader(t("ui_csv_label", lang), type="csv")
         strategy = st.selectbox(
@@ -315,7 +319,7 @@ def main() -> None:
         )
         run = st.button(t("ui_run", lang), type="primary", use_container_width=True)
 
-    source = (symbol, start, uploaded)
+    source = (symbol, start, uploaded, source_name)
     if strategy == "sma":
         st.title(t("strategy_sma", lang, fast=params["fast"], slow=params["slow"]))
     elif strategy == "donchian":
@@ -324,6 +328,10 @@ def main() -> None:
         st.title(t("strategy_momentum", lang, lookback=params["lookback"]))
     st.caption(t("disclaimer", lang))
     _write_share_settings(_share_settings(lang, market_code, symbol.strip(), start.strip(), strategy, params, discount))
+    if source_name != "yahoo":
+        st.query_params["source"] = source_name
+    if source_name == "twse":
+        st.caption(t("source_twse_caveat", lang))
     st.caption(t("ui_share_hint", lang))
 
     tab_backtest, tab_paper = st.tabs([t("tab_backtest", lang), t("tab_paper", lang)])

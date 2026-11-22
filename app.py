@@ -21,6 +21,9 @@ from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import MARKETS, get_market
 from quant_platform.paper import PaperAccount, advance
 from quant_platform.research import cost_sensitivity, split_periods
+from quant_platform.portfolio import FREQ_CODES, align_prices, run_portfolio, signal_weights
+from quant_platform.risk import cap_weights
+from quant_platform.validation import make_grid, stats_from_returns, walk_forward
 from quant_platform.strategy import (
     DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
 )
@@ -284,12 +287,147 @@ def _write_share_settings(settings: dict[str, str]) -> None:
         pass
 
 
+def _parse_int_list(text: str, lang: str) -> list[int]:
+    """Comma-separated positive integers. Raises ValueError with a message the UI can show."""
+    try:
+        values = [int(part) for part in text.split(",") if part.strip()]
+    except ValueError as exc:
+        raise ValueError(t("error_bad_int_list", lang)) from exc
+    if not values or any(v <= 0 for v in values):
+        raise ValueError(t("error_bad_int_list", lang))
+    return values
+
+
+def _render_validation(lang: str, source: tuple, discount: float, market_code: str) -> None:
+    """Walk-forward validation: parameters are chosen on each training window only."""
+    cols = st.columns(2)
+    fast_text = cols[0].text_input(t("ui_fast_list", lang), value="5,10,20", key="wf_fast")
+    slow_text = cols[1].text_input(t("ui_slow_list", lang), value="40,60,120", key="wf_slow")
+    train_bars = int(cols[0].number_input(t("ui_train_bars", lang), min_value=50, value=750, step=50, key="wf_train"))
+    test_bars = int(cols[1].number_input(t("ui_test_bars", lang), min_value=10, value=250, step=10, key="wf_test"))
+    if not st.button(t("ui_wf_run", lang), key="wf_run"):
+        return
+    try:
+        combos = make_grid(_parse_int_list(fast_text, lang), _parse_int_list(slow_text, lang))
+        if not combos:
+            raise ValueError(t("error_wf_grid", lang))
+        prices = _load_prices(lang, *source)
+        market = get_market(market_code)
+        costs = CostModel.from_market(market, discount=discount)
+        result = walk_forward(
+            prices, combos, costs,
+            periods_per_year=market.trading_days_per_year,
+            train_bars=train_bars, test_bars=test_bars,
+        )
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    rows = [
+        {
+            "train": f"{w.train_start.date()} → {w.train_end.date()}",
+            "test": f"{w.test_start.date()} → {w.test_end.date()}",
+            "fast": w.fast, "slow": w.slow,
+            "in-sample Sharpe": round(w.in_sample_sharpe, 2) if w.in_sample_sharpe == w.in_sample_sharpe else None,
+            "out-of-sample Sharpe": round(w.out_of_sample_sharpe, 2) if w.out_of_sample_sharpe == w.out_of_sample_sharpe else None,
+        }
+        for w in result.windows
+    ]
+    st.subheader(t("wf_title", lang))
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    oos = result.oos_stats
+    cols = st.columns(4)
+    cols[0].metric(t("total_return", lang), _format("total_return", oos["total_return"], lang))
+    cols[1].metric(t("cagr", lang), _format("cagr", oos["cagr"], lang))
+    cols[2].metric(t("max_drawdown", lang), _format("max_drawdown", oos["max_drawdown"], lang))
+    cols[3].metric(t("sharpe", lang), _format("sharpe", oos["sharpe"], lang))
+    st.subheader(t("wf_oos", lang))
+    if result.warnings:
+        st.warning(t("wf_warnings", lang) + ":\n- " + "\n- ".join(result.warnings))
+    else:
+        st.info(t("wf_no_warnings", lang))
+
+
+def _render_portfolio(lang: str, market_code: str, start: str, discount: float, source_name: str) -> None:
+    """Multi-stock backtest against an equal-weight buy-and-hold benchmark."""
+    symbols_text = st.text_input(t("ui_pf_symbols", lang), value="", key="pf_symbols")
+    cols = st.columns(3)
+    freq = cols[0].selectbox(
+        t("ui_pf_freq", lang), list(FREQ_CODES), index=2,
+        format_func=lambda name: t(f"freq_{name}", lang), key="pf_freq",
+    )
+    mode = cols[1].selectbox(
+        t("ui_pf_mode", lang), ["equal", "signal"],
+        format_func=lambda name: t(f"pf_mode_{name}", lang), key="pf_mode",
+    )
+    max_weight_text = cols[2].text_input(t("ui_max_weight", lang), value="", key="pf_max")
+    fast = slow = 20
+    if mode == "signal":
+        fast_col, slow_col = st.columns(2)
+        fast = int(fast_col.number_input(t("ui_fast", lang), min_value=1, value=20, step=1, key="pf_fast"))
+        slow = int(slow_col.number_input(t("ui_slow", lang), min_value=2, value=60, step=1, key="pf_slow"))
+    if not st.button(t("ui_pf_run", lang), key="pf_run"):
+        return
+    try:
+        symbols = [part.strip() for part in symbols_text.split(",") if part.strip()]
+        if len(symbols) < 2:
+            raise ValueError(t("error_pf_symbols", lang))
+        try:
+            datetime.strptime(start.strip(), "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(t("error_bad_date", lang)) from exc
+        frames = {}
+        for symbol in symbols:
+            try:
+                frames[symbol] = _fetch_cached(source_name, symbol, start.strip())
+            except ValueError:
+                raise
+            except Exception as exc:  # network and provider errors
+                raise ValueError(str(exc)) from exc
+        wide = align_prices(frames)
+        market = get_market(market_code)
+        costs = CostModel.from_market(market, discount=discount)
+        periods = market.trading_days_per_year
+        if mode == "signal":
+            if fast >= slow:
+                raise ValueError(t("error_bad_windows", lang))
+            weights = signal_weights(wide, fast=fast, slow=slow)
+        else:
+            weights = pd.DataFrame(1.0 / len(wide.columns), index=wide.index, columns=wide.columns)
+        if max_weight_text.strip():
+            weights = cap_weights(weights, float(max_weight_text))
+        result = run_portfolio(wide, weights, costs, freq=freq, periods_per_year=periods)
+        bench = run_portfolio(wide, None, costs, freq="never", periods_per_year=periods)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    stats = stats_from_returns(result.net_returns.iloc[1:], periods)
+    bench_stats = stats_from_returns(bench.net_returns.iloc[1:], periods)
+    cols = st.columns(4)
+    cols[0].metric(t("total_return", lang), _format("total_return", stats["total_return"], lang))
+    cols[1].metric(t("cagr", lang), _format("cagr", stats["cagr"], lang))
+    cols[2].metric(t("max_drawdown", lang), _format("max_drawdown", stats["max_drawdown"], lang))
+    cols[3].metric(t("sharpe", lang), _format("sharpe", stats["sharpe"], lang))
+    st.dataframe(
+        pd.DataFrame(
+            {
+                t("pf_orders", lang): [result.trades, bench.trades],
+                t("pf_rebalances", lang): [result.rebalances, bench.rebalances],
+                t("pf_turnover", lang): [f"{result.turnover_per_year:.2f}x", f"{bench.turnover_per_year:.2f}x"],
+                t("pf_costs", lang): [_format("total_costs", result.total_costs, lang), _format("total_costs", bench.total_costs, lang)],
+            },
+            index=[t("ui_strategy_curve", lang), t("pf_bench", lang)],
+        ),
+        use_container_width=True,
+    )
+    st.line_chart(pd.DataFrame({t("ui_strategy_curve", lang): result.equity, t("pf_bench", lang): bench.equity}))
+
+
 def main() -> None:
     st.set_page_config(page_title="quant-platform", layout="wide")
 
     with st.sidebar:
         langs = list(SUPPORTED_LANGS)
-        lang = st.selectbox(t("ui_language", DEFAULT_LANG), langs, index=_qp_index("lang", langs, DEFAULT_LANG))
+        lang = st.selectbox(t("ui_language", DEFAULT_LANG), langs, index=_qp_index("lang", langs, DEFAULT_LANG), key="lang")
         market_codes = sorted(MARKETS)
         market_code = st.selectbox(t("market", lang), market_codes, index=_qp_index("market", market_codes, "TW"))
         symbol = st.text_input(t("ui_symbol", lang), value=_qp("symbol", ""), key="symbol")
@@ -334,11 +472,17 @@ def main() -> None:
         st.caption(t("source_twse_caveat", lang))
     st.caption(t("ui_share_hint", lang))
 
-    tab_backtest, tab_paper = st.tabs([t("tab_backtest", lang), t("tab_paper", lang)])
+    tab_backtest, tab_paper, tab_validation, tab_portfolio = st.tabs(
+        [t("tab_backtest", lang), t("tab_paper", lang), t("tab_validation", lang), t("tab_portfolio", lang)]
+    )
     with tab_backtest:
         _render_backtest(lang, market_code, source, run, strategy, params, discount)
     with tab_paper:
         _render_paper(lang, market_code, source, run, strategy, params, discount)
+    with tab_validation:
+        _render_validation(lang, source, discount, market_code)
+    with tab_portfolio:
+        _render_portfolio(lang, market_code, start, discount, source_name)
 
 
 if __name__ == "__main__":

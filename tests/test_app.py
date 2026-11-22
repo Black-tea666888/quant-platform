@@ -33,7 +33,7 @@ def test_run_without_file_shows_error():
 
 def test_language_switch_to_chinese():
     at = AppTest.from_file(APP, default_timeout=30).run()
-    at.selectbox[0].set_value("zh-TW").run()
+    next(box for box in at.selectbox if box.key == "lang").set_value("zh-TW").run()
     assert not at.exception
     assert any("請輸入 Yahoo 代號或上傳 CSV" in info.value for info in at.info)
 

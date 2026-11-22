@@ -20,6 +20,7 @@ from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import MARKETS, get_market
 from quant_platform.paper import PaperAccount, advance
+from quant_platform.research import cost_sensitivity, split_periods
 from quant_platform.strategy import (
     DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
 )
@@ -152,6 +153,20 @@ def _render_backtest(lang: str, market_code: str, source: tuple, run: bool, stra
         mime="text/csv",
         key="bt_download_trades",
     )
+
+    st.subheader(t("ui_research", lang))
+    default_split = prices["date"].iloc[int(len(prices) * 0.7)].date().isoformat()
+    split_date = st.text_input(t("ui_split_date", lang), value=default_split, key="split_date")
+    try:
+        periods = split_periods(prices, position, costs, split_date.strip())
+    except ValueError:
+        st.error(t("error_bad_date", lang))
+    else:
+        table = pd.DataFrame(periods).T.round(4)
+        table.index = [t("ui_in_sample", lang), t("ui_out_sample", lang)]
+        st.dataframe(table, use_container_width=True)
+    st.write(t("ui_cost_sensitivity", lang))
+    st.dataframe(cost_sensitivity(prices, position, costs).round(4), use_container_width=True, hide_index=True)
 
 
 def _render_paper(lang: str, market_code: str, source: tuple, run_hint: bool, strategy: str, params: dict, discount: float) -> None:

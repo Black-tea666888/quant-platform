@@ -1,4 +1,4 @@
-"""Command-line entry point: run an SMA crossover backtest on a CSV file or a Yahoo Finance symbol."""
+"""Command-line entry point: run a backtest (SMA crossover or Donchian breakout) on a CSV file or a Yahoo Finance symbol."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from quant_platform.backtest import CostModel, run_backtest, summarize
 from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import MARKETS, Market, get_market, load_market_file
-from quant_platform.strategy import sma_crossover
+from quant_platform.strategy import DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, STRATEGIES, build_position
 
 PERCENT_KEYS = {"total_return", "cagr", "max_drawdown", "exposure", "win_rate", "buy_hold"}
 ROW_ORDER = [
@@ -77,8 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p.add_argument("--start", default="2015-01-01", help="start date YYYY-MM-DD (only with --symbol)")
     p.add_argument("--end", default=None, help="end date YYYY-MM-DD (only with --symbol)")
-    p.add_argument("--fast", type=_positive_int("--fast"), default=20, help="fast moving-average window")
-    p.add_argument("--slow", type=_positive_int("--slow"), default=60, help="slow moving-average window")
+    p.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=STRATEGIES, help="sma or donchian")
+    p.add_argument("--fast", type=_positive_int("--fast"), default=20, help="SMA fast window")
+    p.add_argument("--slow", type=_positive_int("--slow"), default=60, help="SMA slow window")
+    p.add_argument("--entry-days", type=_positive_int("--entry-days"), default=DONCHIAN_ENTRY_DAYS, help="Donchian entry channel")
+    p.add_argument("--exit-days", type=_positive_int("--exit-days"), default=DONCHIAN_EXIT_DAYS, help="Donchian exit channel")
 
     # Overrides. If omitted, values come from the market profile.
     p.add_argument("--discount", type=_discount, default=1.0, help="broker fee discount, e.g. 0.6")
@@ -89,8 +92,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    if args.fast >= args.slow:
+    if args.strategy == "sma" and args.fast >= args.slow:
         parser.error(t("error_bad_windows", args.lang))
+    if args.strategy == "donchian" and args.exit_days >= args.entry_days:
+        parser.error(t("error_bad_donchian", args.lang))
     if args.symbol:
         try:
             start = date.fromisoformat(args.start)
@@ -117,13 +122,19 @@ def run(args: argparse.Namespace) -> int:
         slippage=market.default_slippage if args.slippage is None else args.slippage,
     )
 
-    position = sma_crossover(prices["close"], fast=args.fast, slow=args.slow)
+    position = build_position(
+        args.strategy, prices["close"], fast=args.fast, slow=args.slow, entry_days=args.entry_days, exit_days=args.exit_days
+    )
     result = run_backtest(prices, position, costs)
     stats = summarize(result, prices, periods_per_year=market.trading_days_per_year)
 
     lang = args.lang
     print(f"{t('market', lang)}: {market.name} ({market.code}, {market.currency})")
-    print(f"{t('strategy', lang)}: {t('strategy_sma', lang, fast=args.fast, slow=args.slow)}")
+    if args.strategy == "donchian":
+        label = t('strategy_donchian', lang, entry=args.entry_days, exit=args.exit_days)
+    else:
+        label = t('strategy_sma', lang, fast=args.fast, slow=args.slow)
+    print(f"{t('strategy', lang)}: {label}")
     print("-" * 52)
     for key in ROW_ORDER:
         label = t(key, lang)

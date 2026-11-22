@@ -15,11 +15,11 @@ from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import get_market, load_market_file
 from quant_platform.paper import PaperAccount, advance
-from quant_platform.strategy import sma_crossover
+from quant_platform.strategy import DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, STRATEGIES, build_position
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Paper trade an SMA crossover strategy (no broker connection)")
+    p = argparse.ArgumentParser(description="Paper trade an SMA or Donchian strategy (no broker connection)")
     p.add_argument("--lang", default=DEFAULT_LANG, choices=SUPPORTED_LANGS)
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--csv", help="price CSV with date and close columns")
@@ -31,8 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
     mkt = p.add_mutually_exclusive_group()
     mkt.add_argument("--market", default="TW")
     mkt.add_argument("--market-file")
+    p.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=STRATEGIES, help="sma or donchian")
     p.add_argument("--fast", type=int, default=20)
     p.add_argument("--slow", type=int, default=60)
+    p.add_argument("--entry-days", type=int, default=DONCHIAN_ENTRY_DAYS)
+    p.add_argument("--exit-days", type=int, default=DONCHIAN_EXIT_DAYS)
     p.add_argument("--lot-size", type=int, default=None, help="shares per lot (defaults to 1000 for TW, 1 otherwise)")
     p.add_argument("--discount", type=float, default=1.0)
     return p
@@ -43,8 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     lang = args.lang
     try:
         market = load_market_file(args.market_file) if args.market_file else get_market(args.market)
-        if args.fast >= args.slow:
+        if args.strategy == "sma" and args.fast >= args.slow:
             raise ValueError(t("error_bad_windows", lang))
+        if args.strategy == "donchian" and args.exit_days >= args.entry_days:
+            raise ValueError(t("error_bad_donchian", lang))
 
         state_path = Path(args.state)
         if state_path.exists():
@@ -66,7 +71,9 @@ def main(argv: list[str] | None = None) -> int:
 
         costs = CostModel.from_market(market, discount=args.discount)
         lot_size = args.lot_size if args.lot_size is not None else (1000 if market.code == "TW" else 1)
-        position = sma_crossover(prices["close"], fast=args.fast, slow=args.slow)
+        position = build_position(
+            args.strategy, prices["close"], fast=args.fast, slow=args.slow, entry_days=args.entry_days, exit_days=args.exit_days
+        )
 
         orders = advance(account, prices, position, costs, lot_size=lot_size)
         account.save(state_path)

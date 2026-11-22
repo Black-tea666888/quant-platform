@@ -5,6 +5,7 @@
 ## 功能
 - 讀取本機 CSV，或從 Yahoo Finance 下載台股日線（代號加 `.TW`，例如 `2330.TW`）
 - SMA 均線交叉策略（可調短、長均線天數）
+- 唐奇安通道突破策略（收盤突破前 N 日高點進場、跌破前 M 日低點出場，預設 55 / 20）
 - 台股成本模型：手續費、折扣、證交稅（賣出）、滑價假設
 - 績效統計：總報酬、CAGR、最大回撤、Sharpe、交易次數、勝率，並與買進持有比較
 
@@ -20,12 +21,25 @@ python -m quant_platform.paper_cli --csv prices.csv --state paper.json   # 之�
 - 同一個狀態檔不能切換市場。
 - 台股預設每張 1000 股（`--lot-size` 可改）。
 
+### 每日排程（可選，範例未安裝）
+資料來源用 Yahoo 時，台股收盤後（約 14:00 後）再跑較合適。以下是 macOS/Linux crontab 範例（週一至週五 18:00），請把路徑換成你的實際路徑：
+
+```cron
+0 18 * * 1-5 cd /路徑/quant-platform && .venv/bin/python -m quant_platform.paper_cli --symbol 2330.TW --state paper_2330.json --capital 1000000 >> paper.log 2>&1
+```
+
+- 狀態檔（`paper_2330.json`）第一次執行會自動建立，之後接續。
+- 排程會自動下單到模擬帳戶，不會連接券商；請定期檢查 `paper.log`。
+
 ## 網頁介面（Streamlit）
 ```bash
 pip install -r requirements-ui.txt
 streamlit run app.py
 ```
-在側邊欄上傳 CSV、設定均線與折扣，即可看到績效指標、權益曲線與交易紀錄。介面支援英文與繁體中文。
+- 側邊欄可輸入 Yahoo 代號（例如 `2330.TW`）與起始日，或上傳 CSV；有輸入代號時優先使用代號。
+- 「回測」分頁：設定均線與折扣，看績效指標、權益曲線與交易紀錄。
+- 「紙上交易」分頁：設定初始資金（僅新帳戶），可上傳上次下載的狀態 JSON 接續，看帳戶權益與本次新增委託，並可下載新的狀態檔。
+- 介面支援英文與繁體中文。
 
 ## 語言
 預設英文，可用 `--lang zh-TW` 切換為繁體中文。新增語言只需在 `quant_platform/i18n.py` 加入一組翻譯。
@@ -51,7 +65,10 @@ pip install -r requirements.txt
 
 ## 使用
 ```bash
-# 用 Yahoo Finance 資料回測
+# 唐奇安突破（進場 55 日 / 出場 20 日）
+python -m quant_platform.cli --symbol 2330.TW --strategy donchian --entry-days 55 --exit-days 20
+
+# 用 Yahoo Finance 資料回測（SMA，預設）
 python -m quant_platform.cli --symbol 2330.TW --start 2015-01-01 --fast 20 --slow 60
 
 # 用本機 CSV（需包含 date, close 欄位）

@@ -31,6 +31,7 @@ python -m quant_platform.paper_cli --csv prices.csv --state paper.json   # 之�
 ```
 
 - 狀態檔（`paper_2330.json`）第一次執行會自動建立，之後接續。
+- macOS 的 launchd 代理程式無法存取「文件」資料夾（隱私權限），排程放在「文件」底下會以結束碼 78 失敗。請把排程用的副本放在家目錄下（例如 `~/quant-paper`），並在那裡建立 `.venv`。
 - 排程會自動下單到模擬帳戶，不會連接券商；請定期檢查 `paper.log`。
 
 ## 網頁介面（Streamlit）

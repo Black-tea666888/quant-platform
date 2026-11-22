@@ -45,6 +45,7 @@ class YahooSource(PriceSource):
 
 TWSE_MONTH_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={yyyymm}01&stockNo={code}"
 TWSE_REQUEST_DELAY_SECONDS = 0.5
+TWSE_TIMEOUT_SECONDS = 10  # fail fast; a slow provider should show an error, not hang the page
 
 
 class TwseSource(PriceSource):
@@ -76,7 +77,7 @@ class TwseSource(PriceSource):
 
 def fetch_twse_month(code: str, yyyymm: str) -> dict:
     url = TWSE_MONTH_URL.format(yyyymm=yyyymm, code=code)
-    with urllib.request.urlopen(url, timeout=30) as response:  # noqa: S310 - fixed official host
+    with urllib.request.urlopen(url, timeout=TWSE_TIMEOUT_SECONDS) as response:  # noqa: S310 - fixed official host
         return json.loads(response.read().decode("utf-8"))
 
 

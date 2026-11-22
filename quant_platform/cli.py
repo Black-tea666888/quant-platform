@@ -11,6 +11,7 @@ from quant_platform.backtest import CostModel, run_backtest, summarize
 from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import MARKETS, Market, get_market, load_market_file
+from quant_platform.risk import RiskRules, apply_risk_overlay
 from quant_platform.strategy import (
     DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
 )
@@ -87,6 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--exit-days", type=_positive_int("--exit-days"), default=DONCHIAN_EXIT_DAYS, help="Donchian exit channel")
     p.add_argument("--lookback", type=_positive_int("--lookback"), default=MOMENTUM_LOOKBACK, help="momentum lookback in bars")
 
+    # Risk overlay. Leave unset to run without risk limits.
+    p.add_argument("--stop-loss", type=float, default=None, help="exit this far below entry, e.g. 0.08")
+    p.add_argument("--daily-loss-limit", type=float, default=None, help="exit after a loss of this size in one bar")
+    p.add_argument("--max-drawdown-halt", type=float, default=None, help="halt after a drawdown of this size")
+    p.add_argument("--report", default=None, help="write a self-contained HTML report to this path")
+
     # Overrides. If omitted, values come from the market profile.
     p.add_argument("--discount", type=_discount, default=1.0, help="broker fee discount, e.g. 0.6")
     p.add_argument("--commission", type=_non_negative("--commission"), default=None, help="override commission rate")
@@ -130,6 +137,12 @@ def run(args: argparse.Namespace) -> int:
         args.strategy, prices["close"], fast=args.fast, slow=args.slow,
         entry_days=args.entry_days, exit_days=args.exit_days, lookback=args.lookback,
     )
+    rules = RiskRules(
+        stop_loss=args.stop_loss,
+        daily_loss_limit=args.daily_loss_limit,
+        max_drawdown_halt=args.max_drawdown_halt,
+    )
+    position = apply_risk_overlay(prices["close"], position, rules)
     result = run_backtest(prices, position, costs)
     stats = summarize(result, prices, periods_per_year=market.trading_days_per_year)
 
@@ -148,6 +161,23 @@ def run(args: argparse.Namespace) -> int:
         print(f"{label:<38} {_format_value(key, stats[key], lang):>12}")
     print("-" * 52)
     print(t("disclaimer", lang))
+
+    if args.report:
+        from quant_platform.report import write_report
+
+        buy_hold_curve = prices["close"].astype(float) / prices["close"].astype(float).iloc[0]
+        buy_hold_curve.index = result.equity.index
+        write_report(
+            args.report,
+            title=f"{label} — {market.code}",
+            equity=result.equity,
+            benchmark=buy_hold_curve.rename("buy_hold"),
+            stats=stats,
+            trades=result.trades,
+            lang=lang,
+            subtitle=f"{market.name} · {market.currency}",
+        )
+        print(f"report written to {args.report}")
     return 0
 
 

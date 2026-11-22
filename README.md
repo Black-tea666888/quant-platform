@@ -45,6 +45,78 @@ streamlit run app.py
 - 「回測」分頁底部的「研究檢查」：可設定樣本外切分日期，比較樣本內與樣本外的績效；另有成本敏感度表，列出券商折扣與滑價各種假設的結果，不挑最佳參數。
 - 介面支援英文與繁體中文。
 
+## 驗證（滾動前進測試）
+避免過度擬合的核心工具：在訓練區段選參數，只用下一段未參與選擇的測試區段計算績效，最後合併所有樣本外結果。
+
+```bash
+python -m quant_platform.validate_cli --csv prices.csv --fast 5,10,20 --slow 40,60,120 --train-bars 750 --test-bars 250 --market TW
+```
+
+- 參數只用訓練區段選擇，測試區段資料不會影響選擇（有對應測試）。
+- 會提示：樣本外 Sharpe 為負、樣本內遠高於樣本外、參數頻繁變動、區段太少。
+- 警示只是風險提示，不能證明策略有效或無效。
+
+## 投資組合回測（多標的）
+多個標的、定期再平衡，並與等權重買進持有比較。
+
+```bash
+python -m quant_platform.portfolio_cli --csv A=a.csv --csv B=b.csv --csv C=c.csv --freq monthly --market TW
+python -m quant_platform.portfolio_cli --csv A=a.csv --csv B=b.csv --mode signal --fast 20 --slow 60 --freq weekly
+```
+
+- 只使用所有標的都有資料的日期（內連接），不會憑空補價格。
+- 權重在再平衡當天收盤決定並以收盤成交，與單一標的引擎一致。
+- 現金部位報酬為 0。採用可分割股數，實盤請改用整張或整股。
+- 再平衡頻率：`daily`、`weekly`、`monthly`、`quarterly`、`never`。
+
+## 風控
+單一標的回測與紙上交易都可以加上風控覆寫（決策仍在收盤做出）：
+
+```bash
+python -m quant_platform.cli --csv prices.csv --stop-loss 0.08 --daily-loss-limit 0.03 --max-drawdown-halt 0.20
+python -m quant_platform.paper_cli --csv prices.csv --state paper.json --stop-loss 0.08
+python -m quant_platform.portfolio_cli --csv A=a.csv --csv B=b.csv --max-weight 0.25
+```
+
+- **停損**：收盤價低於進場價達設定比例時出場。
+- **單日虧損上限**：持有部位單一 K 線虧損超過設定比例時出場。
+- **最大回撤停止交易**：策略權益從高點回落超過設定比例時出場，並保持空手。
+- **再進場條件**：出場後，必須等原訊號先關閉再開啟，才會重新進場。
+- **部位上限**：投資組合中單一標的權重不超過設定值，超出的部分保留為現金。
+- 風控判斷使用毛報酬（不含費用）。
+
+## 績效報告（HTML）
+加上 `--report` 會產生單一 HTML 檔，不需要網路或外部資源，內容包含：摘要指標、權益曲線與買進持有比較、回撤圖、月報酬表、交易明細。
+
+```bash
+python -m quant_platform.cli --csv prices.csv --fast 20 --slow 60 --report report.html
+```
+
+## 多用戶基礎（尚未上線）
+`quant_platform/accounts.py` 提供帳號、密碼雜湊（PBKDF2-SHA256）、登入失敗鎖定、角色（admin / member）與每位使用者的獨立資料夾。
+
+- 密碼至少 12 個字元，儲存的是雜湊值，不是明文。
+- 連續 5 次登入失敗會鎖定 15 分鐘；錯誤訊息不會洩露帳號是否存在。
+- 使用者只能讀寫自己的文件，admin 可以讀取所有人的文件。
+- 檔名只允許英數字、`-` 與 `_`，避免路徑穿越。
+
+**上線前仍需要**：HTTPS、正式資料庫（例如 PostgreSQL）、Email 驗證、密碼重設、稽核紀錄、權限與安全性審查，以及正式的 session 管理。
+
+## 模擬交易機器人（僅紙上交易）
+依你自己的設定檔每天執行策略，只做模擬，不會下真實訂單。
+
+```bash
+python -m quant_platform.bot --config examples/bot.example.json --state-dir state --log bot.log
+```
+
+- 設定檔的 `mode` 必須是 `"paper"`，其他值會被拒絕。
+- 沒有券商連線，也不會替其他人下單或推薦標的。
+- 每個策略有獨立的狀態檔，重複執行只會處理新的 K 線。
+- 每次執行會把摘要寫入 log（每行一筆 JSON）。
+- 可用 cron 或 launchd 每天排程執行。
+
+**刻意不提供的功能**：真實下單、代客操作、替多人自動交易，以及付費的交易訊號。這些會涉及投顧、代客操作等法規，需要相關執照與法律審查，我不會在沒有你與律師確認的情況下實作。
+
 ## 語言
 預設英文，可用 `--lang zh-TW` 切換為繁體中文。新增語言只需在 `quant_platform/i18n.py` 加入一組翻譯。
 

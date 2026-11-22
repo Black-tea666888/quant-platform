@@ -15,6 +15,7 @@ from quant_platform.data_sources import get_source
 from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import get_market, load_market_file
 from quant_platform.paper import PaperAccount, advance
+from quant_platform.risk import RiskRules, apply_risk_overlay
 from quant_platform.strategy import (
     DEFAULT_STRATEGY, DONCHIAN_ENTRY_DAYS, DONCHIAN_EXIT_DAYS, MOMENTUM_LOOKBACK, STRATEGIES, build_position,
 )
@@ -42,6 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lookback", type=int, default=MOMENTUM_LOOKBACK)
     p.add_argument("--lot-size", type=int, default=None, help="shares per lot (defaults to 1000 for TW, 1 otherwise)")
     p.add_argument("--discount", type=float, default=1.0)
+    p.add_argument("--stop-loss", type=float, default=None, help="exit this far below entry, e.g. 0.08")
+    p.add_argument("--daily-loss-limit", type=float, default=None, help="exit after a loss of this size in one bar")
+    p.add_argument("--max-drawdown-halt", type=float, default=None, help="halt after a drawdown of this size")
     return p
 
 
@@ -79,6 +83,14 @@ def main(argv: list[str] | None = None) -> int:
             args.strategy, prices["close"], fast=args.fast, slow=args.slow,
             entry_days=args.entry_days, exit_days=args.exit_days, lookback=args.lookback,
         )
+        # The overlay is recomputed from the full history each run. It is deterministic, so
+        # only bars newer than the saved state are traded.
+        rules = RiskRules(
+            stop_loss=args.stop_loss,
+            daily_loss_limit=args.daily_loss_limit,
+            max_drawdown_halt=args.max_drawdown_halt,
+        )
+        position = apply_risk_overlay(prices["close"], position, rules)
 
         orders = advance(account, prices, position, costs, lot_size=lot_size)
         account.save(state_path)

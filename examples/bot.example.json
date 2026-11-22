@@ -1,0 +1,16 @@
+{
+  "mode": "paper",
+  "market": "TW",
+  "capital": 1000000,
+  "lot_size": 1000,
+  "strategies": [
+    {
+      "name": "tsmc",
+      "csv": "data/2330.csv",
+      "fast": 20,
+      "slow": 60,
+      "stop_loss": 0.08,
+      "max_drawdown_halt": 0.20
+    }
+  ]
+}

@@ -59,6 +59,16 @@ CATALOGS: dict[str, dict[str, str]] = {
         "ui_no_trades": "No trades in this period.",
         "ui_equity": "Equity curve",
         "ui_download_equity": "Download equity CSV",
+        "ui_strategy_curve": "Strategy",
+        "ui_buy_hold_curve": "Buy & hold",
+        "ui_assumptions": "Assumptions and limits",
+        "ui_assumptions_body": (
+            "- Signals use each bar's close; trades execute at that same close (no look-ahead).\n"
+            "- Costs: commission times broker discount, sell tax on sells, and one-way slippage.\n"
+            "- Not modeled: intraday liquidity, limit-up/limit-down, suspensions, and order rejection.\n"
+            "- Yahoo prices are adjusted for splits and dividends but may contain gaps or errors.\n"
+            "- Backtests are in-sample and do not predict future results."
+        ),
         "ui_download_trades": "Download trades CSV",
         "tab_backtest": "Backtest",
         "tab_paper": "Paper trading",
@@ -127,6 +137,16 @@ CATALOGS: dict[str, dict[str, str]] = {
         "ui_no_trades": "此期間沒有交易。",
         "ui_equity": "權益曲線",
         "ui_download_equity": "下載權益曲線 CSV",
+        "ui_strategy_curve": "策略",
+        "ui_buy_hold_curve": "買進持有",
+        "ui_assumptions": "假設與限制",
+        "ui_assumptions_body": (
+            "- 信號使用每根 K 線的收盤價，交易以同一收盤價成交（無前視偏誤）。\n"
+            "- 成本：手續費乘以折扣、賣出證交稅、單邊滑價。\n"
+            "- 未模擬：盤中流動性、漲跌停、停牌與委託被拒。\n"
+            "- Yahoo 價格已還原除權息，但仍可能有缺漏或錯誤。\n"
+            "- 回測是樣本內結果，不代表未來績效。"
+        ),
         "ui_download_trades": "下載交易紀錄 CSV",
         "tab_backtest": "回測",
         "tab_paper": "紙上交易",

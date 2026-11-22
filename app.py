@@ -29,6 +29,12 @@ TW_LOT_SIZE = 1000
 DEFAULT_START = "2015-01-01"
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_yahoo_cached(symbol: str, start: str) -> pd.DataFrame:
+    """Yahoo prices cached for an hour, so repeated runs do not hit the provider again."""
+    return get_source("yahoo").fetch(symbol, start)
+
+
 def _read_upload(uploaded) -> pd.DataFrame:
     return clean_prices(pd.read_csv(io.BytesIO(uploaded.getvalue())))
 
@@ -42,7 +48,7 @@ def _load_prices(lang: str, symbol: str, start: str, uploaded) -> pd.DataFrame:
         except ValueError as exc:
             raise ValueError(t("error_bad_date", lang)) from exc
         try:
-            return get_source("yahoo").fetch(symbol, start.strip())
+            return _fetch_yahoo_cached(symbol, start.strip())
         except ValueError:
             raise
         except Exception as exc:  # network and provider errors from yfinance
@@ -96,7 +102,14 @@ def _render_backtest(lang: str, market_code: str, source: tuple, run: bool, stra
     cols[3].metric(t("buy_hold", lang), _format("buy_hold", stats["buy_hold"], lang))
 
     st.subheader(t("ui_equity", lang))
-    st.line_chart(result.equity.rename("strategy"))
+    buy_hold = prices["close"] / prices["close"].iloc[0]
+    comparison = pd.DataFrame(
+        {t("ui_strategy_curve", lang): result.equity.to_numpy(), t("ui_buy_hold_curve", lang): buy_hold.to_numpy()},
+        index=result.equity.index,
+    )
+    st.line_chart(comparison)
+    with st.expander(t("ui_assumptions", lang)):
+        st.markdown(t("ui_assumptions_body", lang))
 
     st.subheader(t("trades", lang))
     if result.trades:

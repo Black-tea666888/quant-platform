@@ -8,6 +8,15 @@ from pathlib import Path
 APP = str(Path(__file__).resolve().parent.parent / "app.py")
 
 
+@pytest.fixture(autouse=True)
+def _clear_streamlit_cache():
+    import streamlit as st
+
+    st.cache_data.clear()
+    yield
+    st.cache_data.clear()
+
+
 def test_app_loads_with_upload_hint():
     at = AppTest.from_file(APP, default_timeout=30).run()
     assert not at.exception
@@ -122,3 +131,31 @@ def test_momentum_strategy_shows_lookback_input():
     assert not at.exception
     assert "Lookback days" in {n.label for n in at.number_input}
     assert any("Time-series momentum" in t.value for t in at.title)
+
+
+def test_backtest_shows_assumptions_and_buy_hold(monkeypatch):
+    _fake_yahoo(monkeypatch)
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    at.text_input(key="symbol").input("2330.TW").run()
+    at = next(b for b in at.button if b.label == "Run backtest").click().run()
+    assert not at.exception
+    assert any("Assumptions and limits" in e.label for e in at.expander)
+
+
+def test_yahoo_results_are_cached(monkeypatch):
+    import pandas as pd
+    from quant_platform import data_sources
+
+    calls = []
+    fake = pd.DataFrame({"date": pd.bdate_range("2020-01-01", periods=200), "close": [float(i + 1) for i in range(200)]})
+
+    def fetch(self, symbol, start=None, end=None):
+        calls.append(symbol)
+        return fake
+
+    monkeypatch.setattr(data_sources.YahooSource, "fetch", fetch)
+    for _ in range(2):
+        at = AppTest.from_file(APP, default_timeout=30).run()
+        at.text_input(key="symbol").input("2330.TW").run()
+        next(b for b in at.button if b.label == "Run backtest").click().run()
+    assert calls == ["2330.TW"]

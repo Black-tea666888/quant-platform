@@ -127,6 +127,14 @@ python -m quant_platform.accounts_cli --db accounts.sqlite --workspace workspace
 ```
 
 - 登入失敗只顯示一般性錯誤，不會透露帳號是否存在。
+- 管理指令（需要能讀寫資料庫檔案，這是信任邊界）：
+
+```bash
+python -m quant_platform.accounts_cli --db accounts.sqlite --workspace workspace reset-password --email you@example.com
+python -m quant_platform.accounts_cli --db accounts.sqlite --workspace workspace audit --limit 20
+```
+
+- 稽核紀錄會記下登入成功、失敗、鎖定、建立帳號、改密碼與改角色。紀錄不含密碼。
 - 這只是基礎登入閘門。上線前仍需要 HTTPS、託管資料庫、Email 驗證、重設密碼、稽核紀錄與安全審查（見上方「多用戶基礎」）。
 
 ### 每日摘要 HTML（機器人）

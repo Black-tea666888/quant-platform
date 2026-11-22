@@ -60,6 +60,7 @@ CATALOGS: dict[str, dict[str, str]] = {
         "ui_equity": "Equity curve",
         "ui_download_equity": "Download equity CSV",
         "ui_strategy_curve": "Strategy",
+        "paper_return": "Return since start",
         "ui_buy_hold_curve": "Buy & hold",
         "ui_assumptions": "Assumptions and limits",
         "ui_assumptions_body": (
@@ -138,6 +139,7 @@ CATALOGS: dict[str, dict[str, str]] = {
         "ui_equity": "權益曲線",
         "ui_download_equity": "下載權益曲線 CSV",
         "ui_strategy_curve": "策略",
+        "paper_return": "自開戶以來報酬",
         "ui_buy_hold_curve": "買進持有",
         "ui_assumptions": "假設與限制",
         "ui_assumptions_body": (

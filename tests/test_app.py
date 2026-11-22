@@ -86,7 +86,7 @@ def test_paper_from_yahoo_symbol(monkeypatch):
     at = next(b for b in at.button if b.label == "Run paper trading").click().run()
     assert not at.exception
     assert not at.error
-    assert len(at.metric) == 3
+    assert len(at.metric) == 4
 
 
 def test_yahoo_network_error_is_shown_not_raised(monkeypatch):
@@ -159,3 +159,19 @@ def test_yahoo_results_are_cached(monkeypatch):
         at.text_input(key="symbol").input("2330.TW").run()
         next(b for b in at.button if b.label == "Run backtest").click().run()
     assert calls == ["2330.TW"]
+
+
+def test_paper_run_shows_return_metric(monkeypatch):
+    import numpy as np
+    import pandas as pd
+    from quant_platform import data_sources
+
+    dates = pd.bdate_range("2020-01-01", periods=200)
+    fake = pd.DataFrame({"date": dates, "close": np.linspace(100, 150, 200)})
+    monkeypatch.setattr(data_sources.YahooSource, "fetch", lambda self, symbol, start=None, end=None: fake)
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    at.text_input(key="symbol").input("2330.TW").run()
+    at = next(b for b in at.button if b.label == "Run paper trading").click().run()
+    assert not at.exception
+    assert not at.error
+    assert "Return since start" in {m.label for m in at.metric}

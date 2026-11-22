@@ -192,6 +192,8 @@ def _render_paper(lang: str, market_code: str, source: tuple, run_hint: bool, st
     last = account.equity_curve[-1] if account.equity_curve else None
     cols = st.columns(3)
     cols[0].metric(t("paper_equity", lang), f"{last['equity']:,.0f}" if last else t("not_available", lang))
+    if last:
+        cols[0].metric(t("paper_return", lang), f"{last['equity'] / account.capital - 1:.2%}")
     cols[1].metric(t("paper_cash", lang), f"{account.cash:,.0f}")
     cols[2].metric(t("paper_shares", lang), f"{account.shares:,.0f}")
 
@@ -203,8 +205,13 @@ def _render_paper(lang: str, market_code: str, source: tuple, run_hint: bool, st
 
     if account.equity_curve:
         st.subheader(t("paper_equity_curve", lang))
-        curve = pd.DataFrame(account.equity_curve).set_index("date")["equity"].rename("account")
-        st.line_chart(curve)
+        curve = pd.DataFrame(account.equity_curve).set_index("date")["equity"]
+        closes = prices.assign(date=prices["date"].dt.strftime("%Y-%m-%d")).set_index("date")["close"]
+        held = closes.reindex(curve.index).dropna()
+        comparison = pd.DataFrame({t("ui_strategy_curve", lang): curve.reindex(held.index)})
+        if not held.empty:
+            comparison[t("ui_buy_hold_curve", lang)] = held / held.iloc[0] * comparison.iloc[0, 0]
+        st.line_chart(comparison)
 
     st.download_button(
         t("paper_download_state", lang),

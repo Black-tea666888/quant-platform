@@ -117,6 +117,26 @@ python -m quant_platform.bot --config examples/bot.example.json --state-dir stat
 
 **刻意不提供的功能**：真實下單、代客操作、替多人自動交易，以及付費的交易訊號。這些會涉及投顧、代客操作等法規，需要相關執照與法律審查，我不會在沒有你與律師確認的情況下實作。
 
+### 網頁登入（可選）
+
+- 設定 `QP_AUTH_DB` 指向 SQLite 檔案後，網頁會要求登入；未設定時維持原本的開放模式。
+- 帳號由命令列建立（不提供自助註冊）：
+
+```bash
+python -m quant_platform.accounts_cli --db accounts.sqlite --workspace workspace create --email you@example.com --role admin
+```
+
+- 登入失敗只顯示一般性錯誤，不會透露帳號是否存在。
+- 這只是基礎登入閘門。上線前仍需要 HTTPS、託管資料庫、Email 驗證、重設密碼、稽核紀錄與安全審查（見上方「多用戶基礎」）。
+
+### 每日摘要 HTML（機器人）
+
+```bash
+python -m quant_platform.bot --config bot.json --state-dir state --summary-html summary.html --lang zh-TW
+```
+
+摘要頁面是獨立的 HTML，所有欄位都經過轉義，並標示「僅為模擬交易」。
+
 ## 語言
 預設英文，可用 `--lang zh-TW` 切換為繁體中文。新增語言只需在 `quant_platform/i18n.py` 加入一組翻譯。
 

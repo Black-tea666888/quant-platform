@@ -26,12 +26,14 @@ import argparse
 import json
 import re
 import sys
+from html import escape
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from quant_platform.backtest import CostModel
 from quant_platform.data_sources import get_source
+from quant_platform.i18n import DEFAULT_LANG, SUPPORTED_LANGS, t
 from quant_platform.markets import get_market
 from quant_platform.paper import PaperAccount, advance
 from quant_platform.risk import RiskRules, apply_risk_overlay
@@ -173,11 +175,54 @@ def run_once(config: BotConfig, state_dir: str | Path, log_path: str | Path | No
     return summaries
 
 
+def build_summary_html(summaries: list[dict], lang: str = DEFAULT_LANG) -> str:
+    """Self-contained HTML table of the latest bot run. All values are escaped."""
+    head = "".join(
+        f"<th>{escape(t(key, lang))}</th>"
+        for key in ("bot_col_strategy", "bot_col_last_bar", "bot_col_equity", "bot_col_cash", "bot_col_shares", "bot_col_orders")
+    )
+    if summaries:
+        body = "".join(
+            "<tr>"
+            f"<td>{escape(str(s['strategy']))}</td>"
+            f"<td>{escape(str(s['last_bar'] or '-'))}</td>"
+            f"<td class=\"num\">{float(s['equity']):,.2f}</td>"
+            f"<td class=\"num\">{float(s['cash']):,.2f}</td>"
+            f"<td class=\"num\">{int(s['shares']):,}</td>"
+            f"<td class=\"num\">{int(s['new_orders'])}</td>"
+            "</tr>"
+            for s in summaries
+        )
+    else:
+        body = f"<tr><td colspan=\"6\">{escape(t('bot_no_strategies', lang))}</td></tr>"
+    generated = escape(str(summaries[0]["time"])) if summaries else "-"
+    return (
+        "<!DOCTYPE html>\n"
+        f"<html lang=\"{escape(lang)}\"><head><meta charset=\"utf-8\">"
+        f"<title>{escape(t('bot_summary_title', lang))}</title>"
+        "<style>body{font-family:system-ui,sans-serif;margin:2rem;color:#222}"
+        "table{border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:.4rem .8rem;text-align:left}"
+        "td.num{text-align:right;font-variant-numeric:tabular-nums}.note{color:#666;font-size:.9rem}</style>"
+        "</head><body>"
+        f"<h1>{escape(t('bot_summary_title', lang))}</h1>"
+        f"<p class=\"note\">{escape(generated)}</p>"
+        f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+        f"<p class=\"note\">{escape(t('bot_paper_only', lang))}</p>"
+        "</body></html>\n"
+    )
+
+
+def write_summary_html(summaries: list[dict], path: str | Path, lang: str = DEFAULT_LANG) -> None:
+    Path(path).write_text(build_summary_html(summaries, lang), encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Paper-trading bot (simulation only, no live orders)")
     p.add_argument("--config", required=True)
     p.add_argument("--state-dir", required=True)
     p.add_argument("--log", default=None, help="append one JSON line per strategy per run")
+    p.add_argument("--summary-html", default=None, help="write a self-contained HTML summary of this run")
+    p.add_argument("--lang", default=DEFAULT_LANG, choices=SUPPORTED_LANGS)
     return p
 
 
@@ -189,9 +234,13 @@ def main(argv: list[str] | None = None) -> int:
     except (BotConfigError, ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if args.summary_html:
+        write_summary_html(summaries, args.summary_html, args.lang)
     for s in summaries:
         print(f"{s['strategy']}: {s['new_orders']} new order(s), last bar {s['last_bar']}, equity {s['equity']:,.2f}")
-    print("Paper trading only. No real orders were placed.")
+    if args.summary_html:
+        print(f"summary written to {args.summary_html}")
+    print(t("bot_paper_only", args.lang))
     return 0
 
 

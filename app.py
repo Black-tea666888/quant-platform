@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import io
 import json
+import os
+from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
+from quant_platform.accounts import AccountError, AccountStore
 from quant_platform.backtest import CostModel, run_backtest, summarize
 from quant_platform.data import clean_prices
 from quant_platform.data_sources import get_source
@@ -422,6 +425,44 @@ def _render_portfolio(lang: str, market_code: str, start: str, discount: float, 
     st.line_chart(pd.DataFrame({t("ui_strategy_curve", lang): result.equity, t("pf_bench", lang): bench.equity}))
 
 
+def _open_store() -> AccountStore | None:
+    """Accounts are optional. Set QP_AUTH_DB to a SQLite path to require sign-in."""
+    db = os.environ.get("QP_AUTH_DB", "").strip()
+    if not db:
+        return None
+    root = os.environ.get("QP_WORKSPACE", "").strip() or str(Path(db).parent / "workspace")
+    return AccountStore(db, root)
+
+
+def _require_login(lang: str) -> bool:
+    """True when the page may render. Opens and closes its own store on each run (thread-safe)."""
+    store = _open_store()
+    if store is None:
+        return True
+    try:
+        user_id = st.session_state.get("user_id")
+        if user_id is not None and store.get_user(user_id) is not None:
+            if st.sidebar.button(t("auth_logout", lang), key="logout"):
+                st.session_state.pop("user_id", None)
+                st.rerun()
+            return True
+        st.session_state.pop("user_id", None)
+        st.title(t("auth_title", lang))
+        with st.form("login"):
+            email = st.text_input(t("auth_email", lang), key="auth_email")
+            password = st.text_input(t("auth_password", lang), type="password", key="auth_password")
+            submitted = st.form_submit_button(t("auth_submit", lang))
+        if submitted:
+            try:
+                st.session_state["user_id"] = store.authenticate(email, password).id
+                st.rerun()
+            except AccountError:
+                st.error(t("auth_failed", lang))
+        return False
+    finally:
+        store.close()
+
+
 def main() -> None:
     st.set_page_config(page_title="quant-platform", layout="wide")
 
@@ -457,6 +498,8 @@ def main() -> None:
         )
         run = st.button(t("ui_run", lang), type="primary", use_container_width=True)
 
+    if not _require_login(lang):
+        st.stop()
     source = (symbol, start, uploaded, source_name)
     if strategy == "sma":
         st.title(t("strategy_sma", lang, fast=params["fast"], slow=params["slow"]))

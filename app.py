@@ -222,31 +222,82 @@ def _render_paper(lang: str, market_code: str, source: tuple, run_hint: bool, st
     )
 
 
+def _qp(key: str, default: str) -> str:
+    """Value from the page address (query parameters), or the default when absent or unreadable."""
+    try:
+        value = st.query_params.get(key, default)
+    except Exception:
+        return default
+    return str(value)
+
+
+def _qp_index(key: str, options: list[str], default: str) -> int:
+    value = _qp(key, default)
+    return options.index(value) if value in options else options.index(default)
+
+
+def _qp_int(key: str, default: int, minimum: int) -> int:
+    try:
+        value = int(_qp(key, str(default)))
+    except ValueError:
+        return default
+    return value if value >= minimum else default
+
+
+def _qp_float(key: str, default: float, low: float, high: float) -> float:
+    try:
+        value = float(_qp(key, str(default)))
+    except ValueError:
+        return default
+    return value if low <= value <= high else default
+
+
+def _share_settings(lang: str, market_code: str, symbol: str, start: str, strategy: str, params: dict, discount: float) -> dict[str, str]:
+    """Settings written into the page address so the link reproduces this view. CSV uploads are not included."""
+    settings = {"lang": lang, "market": market_code, "start": start, "strategy": strategy, "discount": f"{discount:g}"}
+    if symbol:
+        settings["symbol"] = symbol
+    settings.update({key: str(value) for key, value in params.items()})
+    return settings
+
+
+def _write_share_settings(settings: dict[str, str]) -> None:
+    try:
+        for key, value in settings.items():
+            st.query_params[key] = value
+    except Exception:
+        pass
+
+
 def main() -> None:
     st.set_page_config(page_title="quant-platform", layout="wide")
 
     with st.sidebar:
         langs = list(SUPPORTED_LANGS)
-        lang = st.selectbox(t("ui_language", DEFAULT_LANG), langs, index=langs.index(DEFAULT_LANG))
+        lang = st.selectbox(t("ui_language", DEFAULT_LANG), langs, index=_qp_index("lang", langs, DEFAULT_LANG))
         market_codes = sorted(MARKETS)
-        market_code = st.selectbox(t("market", lang), market_codes, index=market_codes.index("TW"))
-        symbol = st.text_input(t("ui_symbol", lang), value="", key="symbol")
-        start = st.text_input(t("ui_start", lang), value=DEFAULT_START, key="start")
+        market_code = st.selectbox(t("market", lang), market_codes, index=_qp_index("market", market_codes, "TW"))
+        symbol = st.text_input(t("ui_symbol", lang), value=_qp("symbol", ""), key="symbol")
+        start = st.text_input(t("ui_start", lang), value=_qp("start", DEFAULT_START), key="start")
         uploaded = st.file_uploader(t("ui_csv_label", lang), type="csv")
         strategy = st.selectbox(
             t("ui_strategy", lang), list(STRATEGIES),
+            index=_qp_index("strategy", list(STRATEGIES), DEFAULT_STRATEGY),
             format_func=lambda name: t(f"strategy_name_{name}", lang), key="strategy",
         )
         params: dict[str, int] = {}
         if strategy == "sma":
-            params["fast"] = int(st.number_input(t("ui_fast", lang), min_value=1, value=20, step=1))
-            params["slow"] = int(st.number_input(t("ui_slow", lang), min_value=2, value=60, step=1))
+            params["fast"] = int(st.number_input(t("ui_fast", lang), min_value=1, value=_qp_int("fast", 20, 1), step=1))
+            params["slow"] = int(st.number_input(t("ui_slow", lang), min_value=2, value=_qp_int("slow", 60, 2), step=1))
         else:
-            params["entry_days"] = int(st.number_input(t("ui_entry_days", lang), min_value=2, value=DONCHIAN_ENTRY_DAYS, step=1))
-            params["exit_days"] = int(st.number_input(t("ui_exit_days", lang), min_value=1, value=DONCHIAN_EXIT_DAYS, step=1))
+            params["entry_days"] = int(st.number_input(t("ui_entry_days", lang), min_value=2, value=_qp_int("entry", DONCHIAN_ENTRY_DAYS, 2), step=1))
+            params["exit_days"] = int(st.number_input(t("ui_exit_days", lang), min_value=1, value=_qp_int("exit", DONCHIAN_EXIT_DAYS, 1), step=1))
         if strategy == "momentum":
-            params["lookback"] = int(st.number_input(t("ui_lookback", lang), min_value=1, value=MOMENTUM_LOOKBACK, step=1))
-        discount = st.number_input(t("ui_discount", lang), min_value=0.01, max_value=1.0, value=1.0, step=0.05)
+            params["lookback"] = int(st.number_input(t("ui_lookback", lang), min_value=1, value=_qp_int("lookback", MOMENTUM_LOOKBACK, 1), step=1))
+        discount = st.number_input(
+            t("ui_discount", lang), min_value=0.01, max_value=1.0,
+            value=_qp_float("discount", 1.0, 0.01, 1.0), step=0.05,
+        )
         run = st.button(t("ui_run", lang), type="primary", use_container_width=True)
 
     source = (symbol, start, uploaded)
@@ -257,6 +308,8 @@ def main() -> None:
     else:
         st.title(t("strategy_momentum", lang, lookback=params["lookback"]))
     st.caption(t("disclaimer", lang))
+    _write_share_settings(_share_settings(lang, market_code, symbol.strip(), start.strip(), strategy, params, discount))
+    st.caption(t("ui_share_hint", lang))
 
     tab_backtest, tab_paper = st.tabs([t("tab_backtest", lang), t("tab_paper", lang)])
     with tab_backtest:

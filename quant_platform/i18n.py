@@ -61,6 +61,7 @@ CATALOGS: dict[str, dict[str, str]] = {
         "ui_download_equity": "Download equity CSV",
         "ui_strategy_curve": "Strategy",
         "paper_return": "Return since start",
+        "ui_share_hint": "The page address now holds these settings, so the link reopens this view. Uploaded CSV files are not included.",
         "ui_buy_hold_curve": "Buy & hold",
         "ui_assumptions": "Assumptions and limits",
         "ui_assumptions_body": (
@@ -140,6 +141,7 @@ CATALOGS: dict[str, dict[str, str]] = {
         "ui_download_equity": "下載權益曲線 CSV",
         "ui_strategy_curve": "策略",
         "paper_return": "自開戶以來報酬",
+        "ui_share_hint": "網址已包含目前的設定，複製網址即可重現此畫面。上傳的 CSV 檔不會包含在網址中。",
         "ui_buy_hold_curve": "買進持有",
         "ui_assumptions": "假設與限制",
         "ui_assumptions_body": (

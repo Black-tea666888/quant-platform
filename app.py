@@ -463,8 +463,43 @@ def _require_login(lang: str) -> bool:
         store.close()
 
 
+_STYLE = """
+<style>
+@keyframes qp-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes qp-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(60, 120, 220, 0.25); }
+  50% { box-shadow: 0 0 0 6px rgba(60, 120, 220, 0); }
+}
+.main .block-container { animation: qp-fade-in 0.4s ease-out; }
+div[data-testid="stMetric"] {
+  background: rgba(128, 128, 128, 0.08);
+  border: 1px solid rgba(128, 128, 128, 0.15);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+div[data-testid="stMetric"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+button[kind="primary"] { animation: qp-pulse 2.4s ease-in-out infinite; }
+button[kind="primary"]:hover { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .main .block-container, div[data-testid="stMetric"], button[kind="primary"] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+</style>
+"""
+
+
 def main() -> None:
     st.set_page_config(page_title="quant-platform", layout="wide")
+    st.markdown(_STYLE, unsafe_allow_html=True)
 
     with st.sidebar:
         langs = list(SUPPORTED_LANGS)

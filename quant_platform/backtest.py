@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from quant_platform.quant_math import calmar_ratio, sortino_ratio
+
 TRADING_DAYS = 252
 
 
@@ -126,6 +128,8 @@ def summarize(result: BacktestResult, prices: pd.DataFrame, periods_per_year: in
         "cagr": cagr,
         "max_drawdown": float(drawdown.min()),
         "sharpe": sharpe,
+        "sortino": sortino_ratio(rets, periods_per_year),
+        "calmar": calmar_ratio(cagr, float(drawdown.min())),
         "exposure": float(result.position.mean()),
         "trades": len(closed),
         "win_rate": len(wins) / len(closed) if closed else float("nan"),

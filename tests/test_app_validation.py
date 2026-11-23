@@ -45,3 +45,11 @@ def test_portfolio_run_without_symbols_shows_error():
     next(b for b in at.button if b.key == "pf_run").click().run()
     assert not at.exception
     assert any("two" in e.value.lower() or "兩個" in e.value for e in at.error)
+
+
+def test_page_includes_motion_styles_with_reduced_motion_guard():
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert not at.exception
+    css = "\n".join(m.value for m in at.markdown)
+    assert "qp-fade-in" in css
+    assert "prefers-reduced-motion" in css

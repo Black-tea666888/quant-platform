@@ -80,3 +80,12 @@ def test_max_drawdown_and_summary_fields():
     assert stats["max_drawdown"] == pytest.approx(0.9 / 1.2 - 1.0)
     assert stats["buy_hold"] == pytest.approx(0.10)
     assert not math.isnan(stats["sharpe"])
+
+
+def test_summary_includes_sortino_and_calmar():
+    prices = _prices([100.0, 120.0, 90.0, 110.0])
+    position = pd.Series([1.0, 1.0, 1.0, 1.0])
+    result = run_backtest(prices, position, FREE)
+    stats = summarize(result, prices)
+    assert stats["calmar"] == pytest.approx(stats["cagr"] / abs(stats["max_drawdown"]))
+    assert not math.isnan(stats["sortino"])

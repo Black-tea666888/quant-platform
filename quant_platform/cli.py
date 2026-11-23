@@ -19,7 +19,7 @@ from quant_platform.strategy import (
 PERCENT_KEYS = {"total_return", "cagr", "max_drawdown", "exposure", "win_rate", "buy_hold"}
 ROW_ORDER = [
     "start_date", "end_date", "total_return", "cagr", "max_drawdown", "sharpe",
-    "exposure", "trades", "win_rate", "buy_hold",
+    "sortino", "calmar", "exposure", "trades", "win_rate", "buy_hold",
 ]
 
 

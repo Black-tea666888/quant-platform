@@ -83,12 +83,12 @@ def build_report_html(
         series_main.append((benchmark, "#999999"))
 
     summary_rows = []
-    for key in ("total_return", "cagr", "max_drawdown", "sharpe", "exposure", "trades", "win_rate", "buy_hold"):
+    for key in ("total_return", "cagr", "max_drawdown", "sharpe", "sortino", "calmar", "exposure", "trades", "win_rate", "buy_hold"):
         if key not in stats:
             continue
         value = stats[key]
         if isinstance(value, float):
-            shown = _fmt_pct(value) if key not in ("sharpe",) else ("N/A" if math.isnan(value) else f"{value:.4f}")
+            shown = _fmt_pct(value) if key not in ("sharpe", "sortino", "calmar") else ("N/A" if math.isnan(value) else f"{value:.4f}")
         else:
             shown = html.escape(str(value))
         summary_rows.append(f"<tr><th>{html.escape(t(key, lang))}</th><td>{shown}</td></tr>")
